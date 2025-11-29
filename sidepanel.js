@@ -318,8 +318,8 @@ function renderResults(data, filter = '') {
             if (angin !== '-' && angin !== '' && arah !== '-' && arah !== '') {
                 extra = `
                 <div style="margin-top:6px; font-size:10px; color:#666; display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">💨 ${angin}</span>
-                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">🧭 ${arah}</span>
+                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">Kecepatan Angin: ${angin}</span>
+                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">Arah: ${arah}</span>
                 </div>`;
             }
 
