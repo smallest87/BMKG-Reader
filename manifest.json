@@ -1,35 +1,38 @@
 {
   "manifest_version": 3,
-  "name": "BMKG Reader Dock",
-  "version": "1.1",
-  "description": "Scraping data cuaca BMKG via Side Panel",
-  "permissions": ["activeTab", "scripting", "sidePanel"],
+  "name": "BMKG Weather Reader",
+  "version": "1.0",
+  "description": "Alat bantu untuk mengambil dan menganalisis data cuaca dari website BMKG (Sederhana & Detail).",
+  "permissions": [
+    "sidePanel",
+    "activeTab"
+  ],
   "host_permissions": [
-    "https://www.bmkg.go.id/*"
+    "https://*.bmkg.go.id/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Buka BMKG Reader Side Panel",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
+    "default_title": "Buka BMKG Reader"
   },
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.bmkg.go.id/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "content_scripts": [
-    {
-      "matches": ["https://www.bmkg.go.id/*"],
-      "js": ["content.js"]
-    }
-  ]
+  }
 }
