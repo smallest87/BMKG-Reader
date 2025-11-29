@@ -1,20 +1,21 @@
-// sidepanel.js - BMKG Reader (Final Collapsed & No-Sticky)
+// sidepanel.js - BMKG Reader (Final Robust Version)
 
 let currentData = null; 
 let activeMode = 'simple'; 
 let activeChartType = 'suhu'; 
+let chartPoints = []; 
 
+// --- 1. FORMATTERS ---
 const formatters = {
     clean: (val) => {
-        if (!val) return '-';
-        let str = val.toString();
-        str = str.replace(/Kelembapan:|Kecepatan Angin:|Arah Angin dari:|Jarak Pandang:/yi, "");
-        str = str.replace(/[^a-zA-Z0-9\s.,\-:%\u00B0\/<>(),]/g, "");
-        return str.replace(/\s+/g, " ").trim();
+        if (val == null) return '-';
+        return val.toString().replace(/Kelembapan:|Kecepatan Angin:|Arah Angin dari:|Jarak Pandang:/yi, "")
+                  .replace(/[^a-zA-Z0-9\s.,\-:%\u00B0\/<>(),]/g, "")
+                  .replace(/\s+/g, " ").trim();
     },
     suhu: (val) => {
-        if (!val || val === '-') return '-';
-        return val.replace(/[^0-9\u00B0\s-]/g, "").trim();
+        if (val == null || val === '-' || val === '') return '-';
+        return val.toString().replace(/[^0-9\u00B0\s-]/g, "").trim();
     },
     getNumber: (val) => {
         if (!val) return 0;
@@ -23,7 +24,19 @@ const formatters = {
     }
 };
 
-// --- UI LOGIC ---
+// --- 2. UI HELPERS ---
+const show = (id) => { const el = document.getElementById(id); if(el) { el.classList.remove('hidden'); el.style.display = 'block'; } };
+const hide = (id) => { const el = document.getElementById(id); if(el) { el.classList.add('hidden'); el.style.display = 'none'; } };
+
+function resetUI() {
+    const cont = document.getElementById('resultsContainer');
+    if(cont) cont.innerHTML = '';
+    ['downloadJsonBtn','downloadCsvBtn','searchContainer','simpleHeader','detailHeader','chartContainer'].forEach(hide);
+    if(document.getElementById('searchInput')) document.getElementById('searchInput').value = '';
+    updateStatus("Pilih mode lalu klik tombol.", false);
+}
+
+// --- 3. EVENT LISTENERS ---
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -34,283 +47,318 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
-document.getElementById('chartType').addEventListener('change', (e) => {
+document.getElementById('chartType')?.addEventListener('change', (e) => {
     activeChartType = e.target.value;
-    if (currentData && activeMode === 'detail') renderChart(currentData.hasil);
+    if (currentData && activeMode === 'detail') safeRenderChart(currentData.hasil);
 });
 
-document.getElementById('searchInput').addEventListener('input', (e) => {
-    const keyword = e.target.value.toLowerCase();
-    if (currentData) renderResults(currentData, keyword);
+document.getElementById('searchInput')?.addEventListener('input', (e) => {
+    if (currentData) renderResults(currentData, e.target.value.toLowerCase());
 });
 
-function resetUI() {
-    document.getElementById('resultsContainer').innerHTML = '';
-    document.getElementById('downloadJsonBtn').style.display = 'none';
-    document.getElementById('downloadCsvBtn').style.display = 'none';
-    document.getElementById('searchContainer').style.display = 'none';
-    document.getElementById('searchInput').value = '';
-    document.getElementById('simpleHeader').style.display = 'none';
-    document.getElementById('detailHeader').style.display = 'none';
-    document.getElementById('chartContainer').style.display = 'none';
-    updateStatus("Pilih mode lalu klik tombol.", false);
-}
-
+// --- 4. MAIN SCRAPE LOGIC ---
 document.getElementById('scrapeBtn').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    
     if (!tab || !tab.url.includes("bmkg.go.id")) {
-        updateStatus("Buka halaman BMKG terlebih dahulu!", true);
-        return;
+        updateStatus("Buka halaman BMKG terlebih dahulu!", true); return;
     }
-    updateStatus(`Mengambil data ${activeMode}...`, false);
-    resetUI();
-    document.getElementById('searchContainer').style.display = 'none'; 
+
+    updateStatus(activeMode === 'detail' ? "Sedang membaca semua tanggal (Auto-Click)..." : "Mengambil data...", false);
+    
+    ['resultsContainer','simpleHeader','detailHeader','chartContainer','searchContainer','downloadJsonBtn','downloadCsvBtn'].forEach(hide);
+    document.getElementById('resultsContainer').innerHTML = '';
 
     chrome.tabs.sendMessage(tab.id, { action: "scrape_weather", mode: activeMode }, (response) => {
-        if (chrome.runtime.lastError || !response || response.error) {
-            updateStatus("Gagal mengambil data.", true);
-        } else {
+        // Error Handling Tingkat Awal
+        if (chrome.runtime.lastError) {
+            updateStatus("Gagal koneksi. Silakan REFRESH halaman web ini.", true); return;
+        }
+        if (!response) {
+            updateStatus("Script tidak merespon. Coba lagi.", true); return;
+        }
+        if (response.error) {
+            updateStatus(response.error, true); return;
+        }
+
+        // --- MULAI RENDERING (DENGAN TRY-CATCH) ---
+        try {
             currentData = response; 
+            
             if (activeMode === 'detail') {
                 renderDetailHeader(response.meta);
-                document.getElementById('chartContainer').style.display = 'block';
-                renderChart(response.hasil);
+                show('chartContainer');
+                // Gunakan fungsi wrapper yang aman
+                setTimeout(() => safeRenderChart(response.hasil), 50);
             } else {
                 renderSimpleHeader(response.meta);
             }
+
             renderResults(response);
-            document.getElementById('searchContainer').style.display = 'block';
-            document.getElementById('downloadJsonBtn').style.display = 'block';
-            document.getElementById('downloadCsvBtn').style.display = 'block';
-            updateStatus(`Selesai. ${response.total_lokasi} data.`, false);
+            
+            show('searchContainer'); show('downloadJsonBtn'); show('downloadCsvBtn');
+            updateStatus(`Selesai. ${response.total_lokasi} grup data ditemukan.`, false);
+
+        } catch (err) {
+            console.error("Rendering Error:", err);
+            updateStatus(`Error Tampilan: ${err.message}`, true);
         }
     });
 });
 
-document.getElementById('downloadJsonBtn').addEventListener('click', () => {
-    if (!currentData) return;
-    const safeName = formatters.clean(currentData.meta.kecamatan).replace(/[^a-zA-Z0-9]/g, '_');
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentData, null, 2));
-    downloadFile(dataStr, `BMKG_${activeMode}_${safeName}.json`);
-});
-
-document.getElementById('downloadCsvBtn').addEventListener('click', () => {
-    if (!currentData) return;
-    const safeName = formatters.clean(currentData.meta.kecamatan).replace(/[^a-zA-Z0-9]/g, '_');
-    const dataStr = "data:text/csv;charset=utf-8,\uFEFF" + encodeURIComponent(convertToCSV(currentData));
-    downloadFile(dataStr, `BMKG_${activeMode}_${safeName}.csv`);
-});
-
-function downloadFile(url, name) {
+// --- 5. DOWNLOADERS ---
+const handleDownload = (ext) => {
+    if (!currentData || !currentData.meta) return;
+    const name = formatters.clean(currentData.meta.kecamatan || "Data").replace(/[^a-zA-Z0-9]/g, '_');
+    const content = ext === 'json' ? JSON.stringify(currentData, null, 2) : "\uFEFF"+convertToCSV(currentData);
+    const type = ext === 'json' ? 'application/json' : 'text/csv;charset=utf-8';
+    
+    const blob = new Blob([content], {type});
     const a = document.createElement('a');
-    a.href = url; a.download = name;
+    a.href = URL.createObjectURL(blob);
+    a.download = `BMKG_${activeMode}_${name}.${ext}`;
     document.body.appendChild(a); a.click(); a.remove();
-}
+};
+
+document.getElementById('downloadJsonBtn').addEventListener('click', () => handleDownload('json'));
+document.getElementById('downloadCsvBtn').addEventListener('click', () => handleDownload('csv'));
 
 function convertToCSV(data) {
     const sep = ";";
-    let headers = ["Waktu", "Wilayah", "Lokasi", "Kondisi", "Suhu", "Kelembapan"];
+    let headers = ["Grup/Tanggal", "Waktu/Lokasi", "Kondisi", "Suhu", "Kelembapan"];
     if (data.meta.mode === 'detail') headers.push("Angin", "Arah");
+    headers.push("Waktu Scraping");
     let rows = [headers.join(sep)];
 
-    data.hasil.forEach(loc => {
-        loc.prakiraan.forEach(day => {
-            let r = [
-                formatters.clean(day.tanggal), formatters.clean(data.meta.kecamatan),
-                formatters.clean(loc.lokasi), formatters.clean(day.kondisi),
-                formatters.suhu(day.suhu), formatters.clean(day.kelembapan)
-            ];
-            if (data.meta.mode === 'detail') {
-                r.push(formatters.clean(day.angin), formatters.clean(day.arah));
+    if (data.hasil && Array.isArray(data.hasil)) {
+        data.hasil.forEach(g => {
+            if (g.data && Array.isArray(g.data)) {
+                g.data.forEach(i => {
+                    let r = [
+                        formatters.clean(g.lokasi), formatters.clean(i.waktu),
+                        formatters.clean(i.kondisi), formatters.suhu(i.suhu),
+                        formatters.clean(i.kelembapan)
+                    ];
+                    if (data.meta.mode === 'detail') r.push(formatters.clean(i.angin), formatters.clean(i.arah));
+                    r.push(data.meta.waktu_ambil);
+                    rows.push(r.join(sep));
+                });
             }
-            rows.push(r.join(sep));
         });
-    });
+    }
     return rows.join("\n");
 }
 
+// --- 6. RENDERERS ---
 function renderSimpleHeader(meta) {
-    document.getElementById('simpleHeader').style.display = 'block';
-    document.getElementById('infoKecamatan').innerText = formatters.clean(meta.kecamatan);
-    document.getElementById('infoWaktu').innerText = `Data diambil: ${meta.waktu_ambil}`;
+    if (!meta) return;
+    show('simpleHeader');
+    const k = document.getElementById('infoKecamatan'); if(k) k.innerText = formatters.clean(meta.kecamatan);
+    const w = document.getElementById('infoWaktu'); if(w) w.innerText = `Data: ${meta.waktu_ambil}`;
 }
 
 function renderDetailHeader(meta) {
-    const dh = document.getElementById('detailHeader');
-    const info = meta.header_info;
-    if (!info) { dh.style.display = 'none'; return; }
-    
-    dh.style.display = 'block';
-    dh.innerHTML = `
+    if (!meta || !meta.header_info) { hide('detailHeader'); return; }
+    show('detailHeader');
+    const i = meta.header_info;
+    const el = document.getElementById('detailHeader');
+    el.innerHTML = `
         <div class="dh-top">
-            <div>
-                <div class="dh-temp">${formatters.suhu(info.suhu)}</div>
-                <div class="dh-cond">${formatters.clean(info.kondisi)}</div>
-            </div>
+            <div><div class="dh-temp">${formatters.suhu(i.suhu)}</div><div class="dh-cond">${formatters.clean(i.kondisi)}</div></div>
             <div class="dh-loc">${formatters.clean(meta.kecamatan)}</div>
         </div>
         <div class="dh-grid">
-            <div class="dh-item"><strong>RH</strong>${formatters.clean(info.kelembapan)}</div>
-            <div class="dh-item"><strong>Angin</strong>${formatters.clean(info.angin)}</div>
-            <div class="dh-item"><strong>Arah</strong>${formatters.clean(info.arah)}</div>
-            <div class="dh-item"><strong>Jarak</strong>${formatters.clean(info.jarak_pandang)}</div>
+            <div class="dh-item"><strong>RH</strong>${formatters.clean(i.kelembapan)}</div>
+            <div class="dh-item"><strong>Angin</strong>${formatters.clean(i.angin)}</div>
+            <div class="dh-item"><strong>Arah</strong>${formatters.clean(i.arah)}</div>
+            <div class="dh-item"><strong>Jarak</strong>${formatters.clean(i.jarak_pandang)}</div>
         </div>
-    `;
+        <div style="margin-top:8px; font-size:10px; text-align:right; color:#64748b;">Update: ${meta.waktu_ambil}</div>`;
 }
 
-function renderChart(dataHasil) {
-    const canvas = document.getElementById('weatherChart');
-    const ctx = canvas.getContext('2d');
-    let dataPoints = []; let labels = [];
+// Wrapper Aman untuk Chart
+function safeRenderChart(data) {
+    try {
+        renderChart(data);
+    } catch (e) {
+        console.error("Chart Error:", e);
+        hide('chartContainer'); // Sembunyikan chart jika error, jangan biarkan aplikasi crash
+    }
+}
+
+function renderChart(data) {
+    const cvs = document.getElementById('weatherChart');
+    if (!cvs || cvs.offsetParent === null) return;
     
-    if (dataHasil.length > 0 && dataHasil[0].prakiraan) {
-        dataHasil[0].prakiraan.forEach(day => {
-            let val = 0;
-            if (activeChartType === 'suhu') val = formatters.getNumber(day.suhu);
-            else if (activeChartType === 'kelembapan') val = formatters.getNumber(day.kelembapan);
-            else if (activeChartType === 'angin') val = formatters.getNumber(day.angin);
-            
-            if (!isNaN(val)) {
-                dataPoints.push(val);
-                labels.push(day.tanggal.split(' ')[0]);
-            }
-        });
+    // VALIDASI DATA AGAR TIDAK CRASH
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        hide('chartContainer'); return;
     }
 
-    if (dataPoints.length === 0) return;
+    const ctx = cvs.getContext('2d');
+    let pts = [], lbls = []; chartPoints = [];
 
-    const config = {
-        suhu: { color: '#d63384', bg: 'rgba(214, 51, 132, 0.1)' },
-        kelembapan: { color: '#0d6efd', bg: 'rgba(13, 110, 253, 0.1)' },
-        angin: { color: '#198754', bg: 'rgba(25, 135, 84, 0.1)' }
-    };
-    const style = config[activeChartType];
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-    
-    const width = rect.width; const height = rect.height;
-    const padLeft = 30; const padBottom = 20;
-    const graphW = width - padLeft - 10; const graphH = height - padBottom - 10;
-
-    let minVal = Math.min(...dataPoints);
-    let maxVal = Math.max(...dataPoints);
-    if (minVal === maxVal) { minVal -= 5; maxVal += 5; }
-    else { const r = maxVal - minVal; minVal -= r * 0.2; maxVal += r * 0.2; }
-
-    const getX = (i) => padLeft + (i / (dataPoints.length - 1)) * graphW;
-    const getY = (v) => 10 + graphH - ((v - minVal) / (maxVal - minVal)) * graphH;
-
-    ctx.clearRect(0, 0, width, height);
-    ctx.strokeStyle = '#eee'; ctx.lineWidth = 1; ctx.fillStyle = '#888';
-    ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-
-    for (let i = 0; i <= 4; i++) {
-        const val = minVal + (i / 4) * (maxVal - minVal);
-        const y = getY(val);
-        ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(width, y); ctx.stroke();
-        ctx.fillText(Math.round(val), padLeft - 5, y);
-    }
-
-    ctx.beginPath(); ctx.strokeStyle = style.color; ctx.lineWidth = 2;
-    dataPoints.forEach((val, i) => {
-        const x = getX(i); const y = getY(val);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    ctx.lineTo(getX(dataPoints.length - 1), height - padBottom);
-    ctx.lineTo(getX(0), height - padBottom);
-    ctx.closePath();
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, style.bg); gradient.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = gradient; ctx.fill();
-
-    ctx.fillStyle = '#666'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    const step = Math.ceil(labels.length / 6);
-    labels.forEach((lbl, i) => {
-        if (i % step === 0 || i === labels.length - 1) {
-            ctx.fillText(lbl, getX(i), height - padBottom + 5);
+    data.forEach(g => {
+        if (g.data && Array.isArray(g.data)) {
+            g.data.forEach(i => {
+                let v = 0;
+                if (activeChartType === 'suhu') v = formatters.getNumber(i.suhu);
+                else if (activeChartType === 'kelembapan') v = formatters.getNumber(i.kelembapan);
+                else if (activeChartType === 'angin') v = formatters.getNumber(i.angin);
+                
+                if (!isNaN(v)) {
+                    const tglP = g.lokasi ? g.lokasi.split(' ').slice(0,2).join(' ') : '';
+                    // Safety check for waktu string
+                    const jam = i.waktu ? i.waktu.split(' ')[0] : '-';
+                    lbls.push({ t: jam, full: `${i.waktu} (${tglP})` });
+                    pts.push(v);
+                }
+            });
         }
     });
 
-    dataPoints.forEach((val, i) => {
-        const x = getX(i); const y = getY(val);
-        ctx.beginPath(); ctx.fillStyle = '#fff'; ctx.strokeStyle = style.color; ctx.lineWidth = 2;
-        ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (pts.length === 0) { hide('chartContainer'); return; }
+
+    // ... (Sisa konfigurasi chart sama) ...
+    const cfg = {
+        suhu: { c: '#d63384', b: 'rgba(214,51,132,0.1)', u: '°C' },
+        kelembapan: { c: '#0d6efd', b: 'rgba(13,110,253,0.1)', u: '%' },
+        angin: { c: '#198754', b: 'rgba(25,135,84,0.1)', u: 'km/h' }
+    };
+    const st = cfg[activeChartType];
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = cvs.getBoundingClientRect();
+    cvs.width = rect.width * dpr; cvs.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    const W = rect.width, H = rect.height, pL = 30, pB = 20;
+
+    let min = Math.min(...pts), max = Math.max(...pts);
+    if (min===max) { min-=5; max+=5; } else { const r=max-min; min-=r*0.2; max+=r*0.2; }
+    
+    const getX = i => pL + (i / (pts.length-1)) * (W-pL-10);
+    const getY = v => 10 + (H-pB-10) - ((v-min)/(max-min)) * (H-pB-10);
+
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='#eee'; ctx.lineWidth=1; ctx.fillStyle='#888'; 
+    ctx.textAlign='right'; ctx.font='10px sans-serif';
+    for(let i=0; i<=4; i++) {
+        const v = min+(i/4)*(max-min); const y = getY(v);
+        ctx.beginPath(); ctx.moveTo(pL,y); ctx.lineTo(W,y); ctx.stroke();
+        ctx.fillText(Math.round(v), pL-5, y);
+    }
+
+    ctx.beginPath(); ctx.strokeStyle=st.c; ctx.lineWidth=2;
+    pts.forEach((v,i)=>{ const x=getX(i), y=getY(v); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); });
+    ctx.stroke();
+
+    ctx.lineTo(getX(pts.length-1), H-pB); ctx.lineTo(getX(0), H-pB); ctx.closePath();
+    const grd = ctx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0,st.b); grd.addColorStop(1,"rgba(255,255,255,0)");
+    ctx.fillStyle=grd; ctx.fill();
+
+    ctx.fillStyle='#666'; ctx.textAlign='center'; 
+    const step = Math.ceil(pts.length/6);
+    lbls.forEach((l,i)=>{ if(i%step===0 || i===lbls.length-1) ctx.fillText(l.t, getX(i), H-pB+12); });
+
+    pts.forEach((v,i)=>{
+        const x=getX(i), y=getY(v);
+        ctx.beginPath(); ctx.fillStyle='#fff'; ctx.strokeStyle=st.c; ctx.lineWidth=2;
+        ctx.arc(x,y,3,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        chartPoints.push({ x, y, val: v, label: lbls[i].full, unit: st.u });
     });
 }
 
-// --- RENDER LIST (DEFAULT CLOSED) ---
-function renderResults(data, filter = '') {
-    const container = document.getElementById('resultsContainer');
-    container.innerHTML = '';
-    const isDetail = data.meta.mode === 'detail';
-
-    const groups = {};
-    data.hasil.forEach(loc => {
-        loc.prakiraan.forEach(day => {
-            const key = formatters.clean(day.tanggal);
-            if (!groups[key]) groups[key] = [];
-            groups[key].push({ lokasi: loc.lokasi, ...day });
+// Tooltip
+const chartCvs = document.getElementById('weatherChart');
+const tooltip = document.getElementById('chartTooltip');
+if (chartCvs) {
+    chartCvs.addEventListener('mousemove', (e) => {
+        if(!chartPoints.length) return;
+        const r = chartCvs.getBoundingClientRect();
+        const mx = e.clientX - r.left, my = e.clientY - r.top;
+        let closest = null, minD = 20;
+        chartPoints.forEach(p => {
+            const d = Math.sqrt(Math.pow(mx-p.x,2) + Math.pow(my-p.y,2));
+            if(d<minD) { minD=d; closest=p; }
         });
+        if(closest) {
+            tooltip.style.display = 'block';
+            tooltip.style.left = `${closest.x}px`; tooltip.style.top = `${closest.y}px`;
+            tooltip.innerHTML = `<strong>${closest.label}</strong><br>${closest.val} ${closest.unit}`;
+            chartCvs.style.cursor = 'pointer';
+        } else {
+            tooltip.style.display = 'none'; chartCvs.style.cursor = 'default';
+        }
     });
+    chartCvs.addEventListener('mouseleave', () => { if(tooltip) tooltip.style.display='none'; });
+}
 
-    Object.keys(groups).forEach(key => {
-        const filtered = groups[key].filter(item => 
-            (item.lokasi + item.kondisi + item.suhu).toLowerCase().includes(filter)
+function renderResults(data, filter = '') {
+    const cont = document.getElementById('resultsContainer');
+    cont.innerHTML = '';
+    const isDetail = data.meta.mode === 'detail';
+    
+    // VALIDASI DATA UTAMA
+    if (!data.hasil || !Array.isArray(data.hasil)) {
+        cont.innerHTML = '<div style="text-align:center; color:red">Data tidak valid</div>';
+        return;
+    }
+
+    data.hasil.forEach(g => {
+        // VALIDASI SUB-DATA
+        if (!g.data || !Array.isArray(g.data)) return;
+
+        const items = g.data.filter(i => 
+            (g.lokasi + ' ' + i.waktu + ' ' + i.kondisi + ' ' + i.suhu).toLowerCase().includes(filter)
         );
-        if (filtered.length === 0) return;
+        if(items.length === 0) return;
 
         const grp = document.createElement('div');
-        // SET DEFAULT CLASS MENJADI 'closed' AGAR TERTUTUP
         grp.className = 'date-group closed';
         
         const hdr = document.createElement('div');
         hdr.className = 'date-header';
-        hdr.innerHTML = `<span>${key}</span><svg class="chevron" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>`;
+        hdr.innerHTML = `<span>${formatters.clean(g.lokasi)}</span><svg class="chevron" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>`;
         hdr.onclick = () => grp.classList.toggle('closed');
-        
-        const content = document.createElement('div');
-        content.className = 'group-content';
 
-        filtered.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'location-item';
-            
-            let detailInfo = '';
-            if (isDetail) {
-                detailInfo = `<div style="margin-top:6px; font-size:10px; color:#666; display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
-                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">Angin: ${formatters.clean(item.angin)}</span>
-                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">Arah: ${formatters.clean(item.arah)}</span>
+        const body = document.createElement('div');
+        body.className = 'group-content';
+
+        items.forEach(i => {
+            const row = document.createElement('div');
+            row.className = 'location-item';
+            let xtra = '';
+            if(isDetail) {
+                xtra = `<div style="margin-top:6px; font-size:10px; color:#666; display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                    <span style="background:#f1f5f9; padding:2px 4px; border-radius:3px;">Angin: ${formatters.clean(i.angin)}</span>
+                    <span style="background:#f1f5f9; padding:2px 4px; border-radius:3px;">Arah: ${formatters.clean(i.arah)}</span>
                 </div>`;
             }
-
-            div.innerHTML = `
+            row.innerHTML = `
                 <div style="display:flex; justify-content:space-between;">
-                    <span class="loc-name" style="margin:0; font-size:12px;">${isDetail ? 'Per Jam' : formatters.clean(item.lokasi)}</span>
-                    <span style="font-weight:bold; color:#d63384; font-size:13px;">${formatters.suhu(item.suhu)}</span>
+                    <span class="loc-name" style="margin:0; font-size:12px;">${formatters.clean(i.waktu)}</span>
+                    <span style="font-weight:bold; color:#d63384; font-size:13px;">${formatters.suhu(i.suhu)}</span>
                 </div>
                 <div class="loc-data" style="margin-top:4px;">
-                    <span style="font-weight:500;">${formatters.clean(item.kondisi)}</span>
-                    <span style="color:#0d6efd; font-weight:500;">RH: ${formatters.clean(item.kelembapan)}</span>
+                    <span style="font-weight:500;">${formatters.clean(i.kondisi)}</span>
+                    <span style="color:#0d6efd; font-weight:500;">RH: ${formatters.clean(i.kelembapan)}</span>
                 </div>
-                ${detailInfo}
+                ${xtra}
             `;
-            content.appendChild(div);
+            body.appendChild(row);
         });
 
         grp.appendChild(hdr);
-        grp.appendChild(content);
-        container.appendChild(grp);
+        grp.appendChild(body);
+        cont.appendChild(grp);
     });
 }
 
 function updateStatus(msg, isError) {
     const el = document.getElementById('status');
-    el.innerText = msg;
-    el.style.color = isError ? '#dc3545' : '#666';
+    if(el) {
+        el.innerText = msg;
+        el.style.color = isError ? '#dc3545' : '#666';
+    }
 }

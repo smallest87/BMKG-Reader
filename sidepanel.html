@@ -7,16 +7,16 @@
       font-family: 'Segoe UI', sans-serif; 
       background-color: #f8f9fa;
       margin: 0; color: #333;
-      overflow-y: auto; /* Scroll di body */
     }
     
-    /* --- Header Section (Tidak lagi Sticky) --- */
-    .header-section {
-      background: #f8f9fa; 
-      padding-bottom: 10px;
-      border-bottom: 1px solid #ddd; 
-      margin-bottom: 15px;
-      /* position: sticky dihapus */
+    /* UTILITY CLASS (PENTING) */
+    .hidden { display: none !important; }
+
+    /* Sticky Header */
+    .sticky-top {
+      position: sticky; top: 0; background: #f8f9fa; 
+      padding-bottom: 10px; z-index: 100;
+      border-bottom: 1px solid #ddd; margin-bottom: 15px;
     }
 
     h3 { margin-top: 0; text-align: center; margin-bottom: 15px; color: #212529; }
@@ -37,11 +37,11 @@
       font-size: 13px; color: white; transition: 0.2s;
     }
     .btn-primary { background: #007bff; } .btn-primary:hover { background: #0056b3; }
-    .btn-json { background: #28a745; display: none; }
-    .btn-csv { background: #17a2b8; display: none; }
+    .btn-json { background: #28a745; } .btn-json:hover { background: #218838; }
+    .btn-csv { background: #17a2b8; } .btn-csv:hover { background: #138496; }
 
     /* Search */
-    .search-container { position: relative; margin-bottom: 10px; display: none; }
+    .search-container { position: relative; margin-bottom: 10px; }
     .search-input {
       width: 100%; padding: 8px 10px 8px 35px; 
       border: 1px solid #ced4da; border-radius: 6px;
@@ -53,16 +53,16 @@
       width: 14px; height: 14px; fill: #999;
     }
 
-    /* Headers Info */
+    /* Headers */
     #simpleHeader {
       background: #fff3cd; border-left: 4px solid #ffc107;
       padding: 10px; border-radius: 4px; margin-top: 10px;
-      font-size: 12px; color: #856404; display: none;
+      font-size: 12px; color: #856404;
     }
     #detailHeader {
       background: linear-gradient(151deg, #e0f2fe 0%, #dbeafe 100%);
       border: 1px solid #bfdbfe; padding: 15px; border-radius: 12px;
-      margin-top: 10px; margin-bottom: 10px; color: #1e3a8a; display: none;
+      margin-top: 10px; margin-bottom: 10px; color: #1e3a8a;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
     .dh-top { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
@@ -76,20 +76,40 @@
     .info-label { font-weight: bold; display: block; margin-bottom: 2px;}
     .info-time { font-size: 11px; opacity: 0.8; display: block;}
 
-    /* Chart Container */
+    /* Chart Container (Fixed) */
     #chartContainer {
         background: white; padding: 15px 10px 10px 10px; 
         border-radius: 8px; border: 1px solid #dee2e6; 
-        margin-bottom: 12px; display: none;
+        margin-bottom: 12px; position: relative;
+        /* display: none;  <-- HAPUS INI AGAR TIDAK KONFLIK */
     }
-    .chart-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .chart-select { padding: 4px 8px; font-size: 11px; border-radius: 4px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; }
+    .chart-controls {
+        display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+    }
+    .chart-select {
+        padding: 4px 8px; font-size: 11px; border-radius: 4px; 
+        border: 1px solid #ccc; background: #f8f9fa; cursor: pointer;
+    }
+    
+    /* Tooltip */
+    #chartTooltip {
+        position: absolute; display: none;
+        background: rgba(0, 0, 0, 0.85); color: white;
+        padding: 6px 10px; border-radius: 4px;
+        font-size: 11px; pointer-events: none; z-index: 10;
+        transform: translate(-50%, -130%); white-space: nowrap;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.2);
+    }
+    #chartTooltip::after {
+        content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px;
+        border-width: 5px; border-style: solid;
+        border-color: rgba(0,0,0,0.85) transparent transparent transparent;
+    }
 
     /* List Styles */
     #resultsContainer { display: flex; flex-direction: column; gap: 12px; padding-bottom: 20px; }
     
     .date-group { background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; transition: all 0.2s; }
-    
     .date-header { 
         background: #343a40; color: white; padding: 10px 12px; 
         font-size: 12px; font-weight: bold; cursor: pointer; 
@@ -97,12 +117,11 @@
     }
     .date-header:hover { background: #23272b; }
     
-    /* Logic Collapsible */
     .group-content { display: block; }
-    .date-group.closed .group-content { display: none; } /* Hidden when closed */
+    .date-group.closed .group-content { display: none; }
     .chevron { width: 16px; height: 16px; fill: none; stroke: white; stroke-width: 2; transition: transform 0.2s; }
     .date-group.closed .chevron { transform: rotate(-90deg); }
-
+    
     .location-item { padding: 10px 12px; border-bottom: 1px solid #f1f1f1; font-size: 12px; }
     .location-item:last-child { border-bottom: none; }
     .loc-name { font-weight: bold; color: #007bff; display: block; margin-bottom: 6px; font-size: 13px;}
@@ -112,7 +131,7 @@
   </style>
 </head>
 <body>
-  <div class="header-section">
+  <div class="sticky-top">
     <h3>BMKG Reader</h3>
     
     <div class="tabs">
@@ -122,24 +141,24 @@
 
     <button id="scrapeBtn" class="btn btn-primary">Ambil Data (Sederhana)</button>
     
-    <div id="searchContainer" class="search-container">
+    <div id="searchContainer" class="search-container hidden">
         <svg class="search-icon" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
         <input type="text" id="searchInput" class="search-input" placeholder="Cari lokasi atau cuaca...">
     </div>
 
     <div style="display: flex; gap: 5px;">
-        <button id="downloadJsonBtn" class="btn btn-json" style="margin-bottom: 0; flex: 1;">JSON</button>
-        <button id="downloadCsvBtn" class="btn btn-csv" style="margin-bottom: 0; flex: 1;">CSV</button>
+        <button id="downloadJsonBtn" class="btn btn-json hidden" style="margin-bottom: 0; flex: 1;">JSON</button>
+        <button id="downloadCsvBtn" class="btn btn-csv hidden" style="margin-bottom: 0; flex: 1;">CSV</button>
     </div>
     
-    <div id="simpleHeader">
+    <div id="simpleHeader" class="hidden">
       <span id="infoKecamatan" class="info-label">-</span>
       <span id="infoWaktu" class="info-time">-</span>
     </div>
 
-    <div id="detailHeader"></div>
+    <div id="detailHeader" class="hidden"></div>
 
-    <div id="chartContainer">
+    <div id="chartContainer" class="hidden">
         <div class="chart-controls">
             <span style="font-size: 11px; font-weight: bold; color: #666;">Grafik Tren</span>
             <select id="chartType" class="chart-select">
@@ -149,6 +168,7 @@
             </select>
         </div>
         <canvas id="weatherChart" width="320" height="150" style="width: 100%; height: 150px;"></canvas>
+        <div id="chartTooltip"></div>
     </div>
     
     <div id="status">Pilih mode lalu klik tombol.</div>
