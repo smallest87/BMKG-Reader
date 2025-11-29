@@ -12,11 +12,13 @@
     /* UTILITY CLASS (PENTING) */
     .hidden { display: none !important; }
 
-    /* Sticky Header */
-    .sticky-top {
-      position: sticky; top: 0; background: #f8f9fa; 
-      padding-bottom: 10px; z-index: 100;
-      border-bottom: 1px solid #ddd; margin-bottom: 15px;
+    /* Header Section (Sticky Removed) */
+    .header-section {
+      background: #f8f9fa; 
+      padding-bottom: 10px; 
+      border-bottom: 1px solid #ddd; 
+      margin-bottom: 15px;
+      /* position: sticky; dihapus */
     }
 
     h3 { margin-top: 0; text-align: center; margin-bottom: 15px; color: #212529; }
@@ -81,7 +83,6 @@
         background: white; padding: 15px 10px 10px 10px; 
         border-radius: 8px; border: 1px solid #dee2e6; 
         margin-bottom: 12px; position: relative;
-        /* display: none;  <-- HAPUS INI AGAR TIDAK KONFLIK */
     }
     .chart-controls {
         display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
@@ -131,7 +132,7 @@
   </style>
 </head>
 <body>
-  <div class="sticky-top">
+  <div class="header-section">
     <h3>BMKG Reader</h3>
     
     <div class="tabs">
