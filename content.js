@@ -1,12 +1,14 @@
-// content.js - BMKG Reader
+// content.js - BMKG Reader Extension (Final Fix for Detail Mode)
 
 function cleanText(str) {
     if (!str) return "-";
     let s = str.toString();
-    // Hapus label statis yang mungkin ikut terambil
+    // Hapus label statis (Case insensitive)
     s = s.replace(/Kelembapan|Kecepatan Angin|Arah Angin dari|Jarak Pandang/gi, "");
+    // Ganti dash
     s = s.replace(/[\u2013\u2014]/g, "-");
-    s = s.replace(/[^a-zA-Z0-9\s.,\-:%\u00B0\/<>(),]/g, "");
+    // Whitelist karakter: Huruf, Angka, Spasi, titik, koma, %, °, /, <, >
+    s = s.replace(/[^a-zA-Z0-9\s.,\-:%\u00B0\/<>]/g, ""); 
     return s.replace(/\s+/g, " ").trim();
 }
 
@@ -16,10 +18,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "scrape_weather") {
         (async () => {
             try {
-                const result = request.mode === 'detail' ? await scrapeDetailData() : scrapeSimpleData();
+                let result;
+                if (request.mode === 'detail') {
+                    result = await scrapeDetailData();
+                } else {
+                    result = scrapeSimpleData();
+                }
                 sendResponse(result);
             } catch (e) {
-                console.error(e);
+                console.error("BMKG Scraper Error:", e);
                 sendResponse({ error: e.message });
             }
         })();
@@ -36,41 +43,45 @@ function scrapeSimpleData() {
     const titleEl = document.querySelector('h2.judul-halaman, .breadcrumb li:last-child, h1');
     if (titleEl) kecamatan = cleanText(titleEl.innerText.replace(/Cuaca/i, ''));
 
-    const dateHeaders = Array.from(document.querySelectorAll('thead tr th')).slice(1).map(th => cleanText(th.innerText));
+    const dateHeaders = [];
+    document.querySelectorAll('thead tr th').forEach((th, i) => {
+        if(i > 0) dateHeaders.push(cleanText(th.innerText));
+    });
 
     document.querySelectorAll('tbody tr').forEach(row => {
         const loc = cleanText(row.querySelector('td:first-child span')?.innerText || "Unknown");
         const daily = [];
         
         row.querySelectorAll('td:not(:first-child)').forEach((cell, i) => {
-            // Ambil semua teks dalam sel, pisahkan berdasarkan baris baru atau elemen blok
-            // Biasanya: Kondisi \n Suhu \n Kelembapan
-            const lines = cell.innerText.split('\n').map(t => cleanText(t)).filter(t => t.length > 0);
+            // Strategi fallback untuk mengambil teks kondisi
+            let kondisi = "-", suhu = "-", kelembapan = "-";
+            const ps = cell.querySelectorAll('p');
             
-            // Fallback logic jika struktur HTML berubah
-            let [kondisi, suhu, kelembapan] = ["-", "-", "-"];
-            
-            if (lines.length >= 3) {
-                kondisi = lines[0];
-                suhu = lines[1];
-                kelembapan = lines[2];
+            if (ps.length >= 3) {
+                kondisi = cleanText(ps[0].innerText);
+                suhu = cleanText(ps[1].innerText);
+                kelembapan = cleanText(ps[2].innerText);
             } else {
-                // Coba selector p jika split gagal
-                const ps = cell.querySelectorAll('p');
-                if (ps.length >= 3) {
-                    kondisi = cleanText(ps[0].innerText);
-                    suhu = cleanText(ps[1].innerText);
-                    kelembapan = cleanText(ps[2].innerText);
+                // Coba split text jika p tidak terdeteksi
+                const lines = cell.innerText.split('\n').filter(t => t.trim().length > 0);
+                if (lines.length >= 3) {
+                    kondisi = cleanText(lines[0]);
+                    suhu = cleanText(lines[1]);
+                    kelembapan = cleanText(lines[2]);
                 }
             }
 
             daily.push({
                 waktu: dateHeaders[i] || `Hari ${i+1}`,
                 kondisi, suhu, kelembapan,
-                angin: '-', arah: '-' // Data tidak tersedia di tabel sederhana
+                // Mode sederhana tidak punya data angin, tapi kita isi '-' agar struktur sama
+                angin: '-', arah: '-' 
             });
         });
-        weatherData.push({ lokasi: loc, data: daily });
+        
+        if (daily.length > 0) {
+            weatherData.push({ lokasi: loc, data: daily });
+        }
     });
 
     return {
@@ -80,7 +91,7 @@ function scrapeSimpleData() {
     };
 }
 
-// --- MODE 2: DETAIL ---
+// --- MODE 2: DETAIL (FIXED SLIDER SCRAPING) ---
 async function scrapeDetailData() {
     console.log("Scraping: Detail");
     
@@ -88,86 +99,108 @@ async function scrapeDetailData() {
     const h1 = document.querySelector('h1');
     if (h1) lokasiUtama = cleanText(h1.innerText.replace('Prakiraan Cuaca', ''));
 
-    // 1. Header Card
+    // 1. HEADER INFO (KARTU BIRU)
     let headerInfo = null;
-    const headerCard = document.querySelector("div[class*='bg-[linear-gradient(151deg']");
-    if (headerCard) {
-        const grids = headerCard.querySelectorAll(".border-gray-stroke");
-        let h="-", w="-", d="-", v="-";
-        if (grids.length >= 4) {
-            // Ambil textContent (semua teks di dalam) agar aman
-            h = cleanText(grids[0].textContent);
-            w = cleanText(grids[1].textContent);
-            d = cleanText(grids[2].textContent);
-            v = cleanText(grids[3].textContent);
+    // Cari div yang mengandung teks spesifik (lebih aman daripada class)
+    const allDivs = document.querySelectorAll('div');
+    let headerCard = null;
+    for(let d of allDivs) {
+        // Ciri khas header card: ada teks 'Saat ini' dan 'Pemutakhiran'
+        if(d.innerText.includes("Saat ini") && d.innerText.includes("Pemutakhiran")) {
+            headerCard = d; break;
         }
+    }
+
+    if (headerCard) {
+        // Ambil kotak-kotak kecil di bawahnya (biasanya punya border)
+        const grids = headerCard.querySelectorAll("[class*='border-gray-stroke']");
+        let h="-", w="-", d="-", v="-";
+        
+        // Kita cari berdasarkan konten teksnya agar tidak tertukar
+        grids.forEach(g => {
+            const txt = g.innerText;
+            if (txt.includes("Kelembapan")) h = cleanText(txt);
+            else if (txt.includes("Kecepatan Angin")) w = cleanText(txt);
+            else if (txt.includes("Arah Angin")) d = cleanText(txt);
+            else if (txt.includes("Jarak Pandang")) v = cleanText(txt);
+        });
+
+        const tEl = headerCard.querySelector("p[class*='text-[40px]'], p[class*='text-[56px]']");
+        const cEl = headerCard.querySelector("p.text-black-primary.font-medium");
+
         headerInfo = {
-            suhu: cleanText(headerCard.querySelector("p[class*='text-[40px]'], p[class*='text-[56px]']")?.innerText),
-            kondisi: cleanText(headerCard.querySelector("p.text-black-primary.font-medium")?.innerText),
+            suhu: cleanText(tEl?.innerText),
+            kondisi: cleanText(cEl?.innerText),
             kelembapan: h, angin: w, arah: d, jarak_pandang: v
         };
     }
 
-    // 2. Tombol & Slider
+    // 2. NAVIGASI TANGGAL
     const btnContainer = document.querySelector('.overflow-x-auto.flex.gap-2, .overflow-x-scroll');
     const buttons = btnContainer ? Array.from(btnContainer.querySelectorAll('button')) : [];
-    if (buttons.length === 0) return { error: "Tombol tanggal tidak ditemukan." };
+    
+    if (buttons.length === 0) return { error: "Tombol navigasi tanggal tidak ditemukan." };
 
     let allDailyData = [];
 
+    // Loop Tombol
     for (let i = 0; i < buttons.length; i++) {
         buttons[i].click();
-        await sleep(800); // Tunggu render
+        await sleep(800); // Tunggu render DOM
 
-        // Ambil tanggal dari H2 aktif
+        // Ambil Header Tanggal H2
         let dateText = cleanText(buttons[i].innerText);
-        const h2Headers = document.querySelectorAll('h2');
-        for (let h2 of h2Headers) {
-            if (h2.innerText.includes('Prakiraan Cuaca') && h2.innerText.match(/\d{4}/)) {
+        const h2s = document.querySelectorAll('h2');
+        for(let h2 of h2s) {
+            if(h2.innerText.includes("Prakiraan Cuaca") && h2.innerText.match(/\d{4}/)) {
                 dateText = cleanText(h2.innerText.replace('Prakiraan Cuaca', '').split('Pemutakhiran')[0]);
                 break;
             }
         }
 
-        // Scrape Slider Items
+        // 3. SCRAPE SLIDER (BAGIAN PENTING YANG DIPERBAIKI)
         const slides = document.querySelectorAll('.swiper-slide');
         let hourlyData = [];
 
         slides.forEach(slide => {
+            // Cek Jam
             const pTags = slide.querySelectorAll('p');
             let jam = "-";
-            
-            // Cari Jam (WIB/WITA/WIT)
             for (let p of pTags) {
                 if (p.innerText.match(/WI(B|TA|T)/)) {
                     jam = cleanText(p.innerText); break;
                 }
             }
-            if (jam === "-" || jam === "") return;
+            if (jam === "-" || jam === "") return; // Skip jika bukan slide cuaca
 
-            // Cari Suhu & Kondisi
-            let suhu = "-", kondisi = "-";
+            // Cek Suhu
+            let suhu = "-";
             const suhuEl = Array.from(pTags).find(el => el.innerText.includes('°C'));
-            if (suhuEl) {
-                suhu = cleanText(suhuEl.innerText);
-                if (suhuEl.nextElementSibling) kondisi = cleanText(suhuEl.nextElementSibling.innerText);
+            if (suhuEl) suhu = cleanText(suhuEl.innerText);
+
+            // Cek Kondisi (Sibling dari suhu atau cari teks bold)
+            let kondisi = "-";
+            if (suhuEl && suhuEl.nextElementSibling) {
+                kondisi = cleanText(suhuEl.nextElementSibling.innerText);
             }
 
-            // Cari Detail (Angin, dll) di dalam kotak putih overlay
-            const details = slide.querySelector('.bg-white-overlay');
+            // Cek Detail (Grid Putih Transparan)
+            const detailsContainer = slide.querySelector('.bg-white-overlay');
             let hum="-", wind="-", dir="-";
-            
-            if (details && details.children.length > 0) {
-                const rows = details.children;
-                // Gunakan textContent pada container baris untuk menangkap semua teks
-                // Row 0 = Lembap, 1 = Angin, 2 = Arah
+
+            if (detailsContainer && detailsContainer.children.length > 0) {
+                // PERBAIKAN: Ambil textContent dari masing-masing baris (div anak)
+                // Index 0: Kelembapan, Index 1: Angin, Index 2: Arah
+                const rows = detailsContainer.children;
+                
                 if(rows[0]) hum = cleanText(rows[0].textContent);
                 if(rows[1]) wind = cleanText(rows[1].textContent);
                 if(rows[2]) dir = cleanText(rows[2].textContent);
             }
 
             hourlyData.push({
-                waktu: jam, kondisi, suhu, kelembapan: hum, angin: wind, arah: dir
+                waktu: jam, kondisi, suhu, 
+                kelembapan: hum, angin: wind, arah: dir
             });
         });
 
@@ -176,6 +209,7 @@ async function scrapeDetailData() {
         }
     }
 
+    // Reset ke tab pertama
     if(buttons.length > 0) buttons[0].click();
 
     return {
