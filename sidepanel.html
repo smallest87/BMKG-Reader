@@ -7,8 +7,10 @@
       font-family: 'Segoe UI', sans-serif; 
       background-color: #f8f9fa;
       margin: 0;
+      color: #333;
     }
     
+    /* Sticky Header Area */
     .sticky-top {
       position: sticky; top: 0; background: #f8f9fa; 
       padding-bottom: 10px; z-index: 100;
@@ -16,9 +18,9 @@
       margin-bottom: 15px;
     }
 
-    h3 { margin-top: 0; text-align: center; margin-bottom: 15px; color: #333; }
+    h3 { margin-top: 0; text-align: center; margin-bottom: 15px; color: #212529; }
 
-    /* --- Tabs --- */
+    /* --- Tabs Navigation --- */
     .tabs { display: flex; background: #e9ecef; border-radius: 8px; padding: 4px; margin-bottom: 15px; }
     .tab-btn {
       flex: 1; padding: 8px; border: none; background: transparent;
@@ -27,7 +29,7 @@
     }
     .tab-btn.active { background: white; color: #007bff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
-    /* --- Buttons --- */
+    /* --- Action Buttons --- */
     .btn {
       width: 100%; padding: 10px; border: none; cursor: pointer; 
       font-weight: bold; border-radius: 6px; margin-bottom: 8px;
@@ -37,9 +39,9 @@
     .btn-json { background: #28a745; display: none; } .btn-json:hover { background: #218838; }
     .btn-csv { background: #17a2b8; display: none; } .btn-csv:hover { background: #138496; }
 
-    /* --- Search Box (BARU) --- */
+    /* --- Search Box --- */
     .search-container {
-      position: relative; margin-bottom: 10px; display: none; /* Hidden awal */
+      position: relative; margin-bottom: 10px; display: none;
     }
     .search-input {
       width: 100%; padding: 8px 10px 8px 35px; 
@@ -52,17 +54,18 @@
       width: 14px; height: 14px; fill: #999;
     }
 
-    /* --- Headers --- */
+    /* --- Info Header: Simple Mode --- */
     #simpleHeader {
       background: #fff3cd; border-left: 4px solid #ffc107;
       padding: 10px; border-radius: 4px; margin-top: 10px;
       font-size: 12px; color: #856404; display: none;
     }
 
+    /* --- Info Header: Detail Mode (Blue Card) --- */
     #detailHeader {
       background: linear-gradient(151deg, #e0f2fe 0%, #dbeafe 100%);
       border: 1px solid #bfdbfe;
-      padding: 15px; border-radius: 12px; margin-top: 10px;
+      padding: 15px; border-radius: 12px; margin-top: 10px; margin-bottom: 10px;
       color: #1e3a8a; display: none;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
@@ -72,12 +75,18 @@
     .dh-loc { font-size: 11px; color: #64748b; }
     .dh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     .dh-item { background: rgba(255,255,255,0.6); padding: 6px; border-radius: 6px; font-size: 10px; }
-    .dh-item strong { display: block; font-size: 11px; color: #0f172a; }
+    .dh-item strong { display: block; font-size: 11px; color: #0f172a; margin-bottom: 2px; }
 
     .info-label { font-weight: bold; display: block; margin-bottom: 2px;}
     .info-time { font-size: 11px; opacity: 0.8; display: block;}
 
-    /* --- List Styles --- */
+    /* --- Chart Container --- */
+    #chartContainer {
+        background: white; padding: 10px; border-radius: 8px; 
+        border: 1px solid #dee2e6; margin-bottom: 12px; display: none;
+    }
+
+    /* --- List Styles (Collapsible) --- */
     #resultsContainer { display: flex; flex-direction: column; gap: 12px; }
     
     .date-group { 
@@ -98,6 +107,7 @@
         transition: transform 0.3s ease;
     }
     
+    /* State tertutup */
     .date-group.closed .chevron { transform: rotate(-90deg); }
     .date-group.closed .group-content { display: none; }
 
@@ -106,6 +116,9 @@
     
     .loc-name { font-weight: bold; color: #007bff; display: block; margin-bottom: 6px; font-size: 13px;}
     .loc-data { display: flex; justify-content: space-between; color: #495057; }
+    
+    /* Status Text */
+    #status { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -135,8 +148,13 @@
     </div>
 
     <div id="detailHeader"></div>
+
+    <div id="chartContainer">
+        <p style="font-size: 11px; font-weight: bold; color: #666; margin: 0 0 5px 0;">Tren Suhu (°C)</p>
+        <canvas id="weatherChart" width="300" height="100" style="width: 100%; height: 100px;"></canvas>
+    </div>
     
-    <div id="status" style="text-align: center; font-size: 12px; color: #666; margin-top: 8px;">Pilih mode lalu klik tombol.</div>
+    <div id="status">Pilih mode lalu klik tombol.</div>
   </div>
 
   <div id="resultsContainer"></div>
