@@ -73,6 +73,7 @@ Karena ekstensi ini belum tersedia di Chrome Web Store, Anda dapat menginstalnya
 
 ## 📂 Struktur Proyek
 
+```
 BMKG_Reader/
 ├── background.js      # Service worker untuk mengaktifkan Side Panel
 ├── content.js         # Script utama untuk scraping DOM & Auto-click
@@ -80,6 +81,7 @@ BMKG_Reader/
 ├── sidepanel.js       # Logika UI, Charting, dan Export
 ├── manifest.json      # Konfigurasi ekstensi
 └── icons/             # Aset gambar
+```
 
 ---
 
