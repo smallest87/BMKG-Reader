@@ -1,197 +1,146 @@
-// sidepanel.js - BMKG Reader Extension (Final Version)
+// sidepanel.js - BMKG Reader (Final Collapsed & No-Sticky)
 
 let currentData = null; 
 let activeMode = 'simple'; 
+let activeChartType = 'suhu'; 
 
-// --- 1. FORMATTERS (Data Cleaning) ---
 const formatters = {
     clean: (val) => {
         if (!val) return '-';
         let str = val.toString();
-        // Hapus label dari sumber jika ada
         str = str.replace(/Kelembapan:|Kecepatan Angin:|Arah Angin dari:|Jarak Pandang:/yi, "");
-        // Hapus karakter non-ASCII tapi biarkan simbol penting
         str = str.replace(/[^a-zA-Z0-9\s.,\-:%\u00B0\/<>(),]/g, "");
         return str.replace(/\s+/g, " ").trim();
     },
     suhu: (val) => {
         if (!val || val === '-') return '-';
-        // Format angka + derajat
         return val.replace(/[^0-9\u00B0\s-]/g, "").trim();
+    },
+    getNumber: (val) => {
+        if (!val) return 0;
+        const match = val.toString().match(/[\d,.]+/); 
+        return match ? parseFloat(match[0].replace(',', '.')) : 0;
     }
 };
 
-// --- 2. UI RESET LOGIC ---
+// --- UI LOGIC ---
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        activeMode = e.target.dataset.mode;
+        document.getElementById('scrapeBtn').innerText = `Ambil Data (${activeMode === 'simple' ? 'Sederhana' : 'Detail'})`;
+        resetUI();
+    });
+});
+
+document.getElementById('chartType').addEventListener('change', (e) => {
+    activeChartType = e.target.value;
+    if (currentData && activeMode === 'detail') renderChart(currentData.hasil);
+});
+
+document.getElementById('searchInput').addEventListener('input', (e) => {
+    const keyword = e.target.value.toLowerCase();
+    if (currentData) renderResults(currentData, keyword);
+});
+
 function resetUI() {
     document.getElementById('resultsContainer').innerHTML = '';
     document.getElementById('downloadJsonBtn').style.display = 'none';
     document.getElementById('downloadCsvBtn').style.display = 'none';
     document.getElementById('searchContainer').style.display = 'none';
     document.getElementById('searchInput').value = '';
-    
     document.getElementById('simpleHeader').style.display = 'none';
     document.getElementById('detailHeader').style.display = 'none';
     document.getElementById('chartContainer').style.display = 'none';
-    
     updateStatus("Pilih mode lalu klik tombol.", false);
 }
 
-// --- 3. TAB SWITCHING ---
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        
-        activeMode = e.target.dataset.mode;
-        
-        const btnText = activeMode === 'simple' ? 'Sederhana' : 'Detail';
-        document.getElementById('scrapeBtn').innerText = `Ambil Data (${btnText})`;
-        
-        resetUI();
-    });
-});
-
-// --- 4. SEARCH / FILTER ---
-document.getElementById('searchInput').addEventListener('input', (e) => {
-    const keyword = e.target.value.toLowerCase();
-    if (currentData) {
-        renderResults(currentData, keyword);
-    }
-});
-
-// --- 5. MAIN SCRAPE ACTION ---
 document.getElementById('scrapeBtn').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    
     if (!tab || !tab.url.includes("bmkg.go.id")) {
         updateStatus("Buka halaman BMKG terlebih dahulu!", true);
         return;
     }
-
     updateStatus(`Mengambil data ${activeMode}...`, false);
-    
-    // Bersihkan area hasil sebelum load
-    document.getElementById('resultsContainer').innerHTML = '';
-    document.getElementById('simpleHeader').style.display = 'none';
-    document.getElementById('detailHeader').style.display = 'none';
-    document.getElementById('chartContainer').style.display = 'none';
-    document.getElementById('downloadJsonBtn').style.display = 'none';
-    document.getElementById('downloadCsvBtn').style.display = 'none';
+    resetUI();
+    document.getElementById('searchContainer').style.display = 'none'; 
 
     chrome.tabs.sendMessage(tab.id, { action: "scrape_weather", mode: activeMode }, (response) => {
-        if (chrome.runtime.lastError) {
-            updateStatus("Error: Silakan refresh halaman web BMKG.", true);
-            return;
-        }
-        if (!response) {
+        if (chrome.runtime.lastError || !response || response.error) {
             updateStatus("Gagal mengambil data.", true);
-            return;
-        }
-        if (response.error) {
-            updateStatus(response.error, true);
-            return;
-        }
-
-        // -- SUKSES --
-        currentData = response; 
-        
-        if (activeMode === 'detail') {
-            renderDetailHeader(response.meta);
-            renderChart(response.hasil); // Gambar Grafik
         } else {
-            renderSimpleHeader(response.meta);
+            currentData = response; 
+            if (activeMode === 'detail') {
+                renderDetailHeader(response.meta);
+                document.getElementById('chartContainer').style.display = 'block';
+                renderChart(response.hasil);
+            } else {
+                renderSimpleHeader(response.meta);
+            }
+            renderResults(response);
+            document.getElementById('searchContainer').style.display = 'block';
+            document.getElementById('downloadJsonBtn').style.display = 'block';
+            document.getElementById('downloadCsvBtn').style.display = 'block';
+            updateStatus(`Selesai. ${response.total_lokasi} data.`, false);
         }
-
-        renderResults(response); // Render List
-        
-        // Tampilkan fitur interaktif
-        document.getElementById('searchContainer').style.display = 'block';
-        document.getElementById('downloadJsonBtn').style.display = 'block';
-        document.getElementById('downloadCsvBtn').style.display = 'block';
-        
-        updateStatus(`Selesai. ${response.total_lokasi} data ditemukan.`, false);
     });
 });
 
-// --- 6. DOWNLOADERS ---
 document.getElementById('downloadJsonBtn').addEventListener('click', () => {
     if (!currentData) return;
     const safeName = formatters.clean(currentData.meta.kecamatan).replace(/[^a-zA-Z0-9]/g, '_');
-    const fileName = `BMKG_${activeMode}_${safeName}.json`;
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentData, null, 2));
-    downloadFile(dataStr, fileName);
+    downloadFile(dataStr, `BMKG_${activeMode}_${safeName}.json`);
 });
 
 document.getElementById('downloadCsvBtn').addEventListener('click', () => {
     if (!currentData) return;
     const safeName = formatters.clean(currentData.meta.kecamatan).replace(/[^a-zA-Z0-9]/g, '_');
-    const fileName = `BMKG_${activeMode}_${safeName}.csv`;
-    const csvContent = convertToCSV(currentData);
-    const dataStr = "data:text/csv;charset=utf-8,\uFEFF" + encodeURIComponent(csvContent);
-    downloadFile(dataStr, fileName);
+    const dataStr = "data:text/csv;charset=utf-8,\uFEFF" + encodeURIComponent(convertToCSV(currentData));
+    downloadFile(dataStr, `BMKG_${activeMode}_${safeName}.csv`);
 });
 
-function downloadFile(dataUrl, filename) {
-    const dlAnchorElem = document.createElement('a');
-    dlAnchorElem.setAttribute("href", dataUrl);
-    dlAnchorElem.setAttribute("download", filename);
-    document.body.appendChild(dlAnchorElem);
-    dlAnchorElem.click();
-    dlAnchorElem.remove();
+function downloadFile(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
 }
 
 function convertToCSV(data) {
-    const delimiter = ";";
-    let headerArr = ["Waktu/Tanggal", "Wilayah", "Lokasi", "Kondisi", "Suhu", "Kelembapan"];
-    
-    if (data.meta.mode === 'detail') {
-        headerArr.push("Kecepatan Angin", "Arah Angin");
-    }
-    headerArr.push("Waktu Scraping");
-
-    let csvRows = [headerArr.join(delimiter)];
+    const sep = ";";
+    let headers = ["Waktu", "Wilayah", "Lokasi", "Kondisi", "Suhu", "Kelembapan"];
+    if (data.meta.mode === 'detail') headers.push("Angin", "Arah");
+    let rows = [headers.join(sep)];
 
     data.hasil.forEach(loc => {
         loc.prakiraan.forEach(day => {
-            let row = [
-                formatters.clean(day.tanggal),
-                formatters.clean(data.meta.kecamatan),
-                formatters.clean(loc.lokasi),
-                formatters.clean(day.kondisi),
-                formatters.suhu(day.suhu),
-                formatters.clean(day.kelembapan)
+            let r = [
+                formatters.clean(day.tanggal), formatters.clean(data.meta.kecamatan),
+                formatters.clean(loc.lokasi), formatters.clean(day.kondisi),
+                formatters.suhu(day.suhu), formatters.clean(day.kelembapan)
             ];
-
             if (data.meta.mode === 'detail') {
-                row.push(formatters.clean(day.angin), formatters.clean(day.arah));
+                r.push(formatters.clean(day.angin), formatters.clean(day.arah));
             }
-
-            row.push(data.meta.waktu_ambil);
-            csvRows.push(row.join(delimiter));
+            rows.push(r.join(sep));
         });
     });
-    return csvRows.join("\n");
+    return rows.join("\n");
 }
 
-// --- 7. UI RENDERERS ---
-
 function renderSimpleHeader(meta) {
-    const infoHeader = document.getElementById('simpleHeader');
+    document.getElementById('simpleHeader').style.display = 'block';
     document.getElementById('infoKecamatan').innerText = formatters.clean(meta.kecamatan);
     document.getElementById('infoWaktu').innerText = `Data diambil: ${meta.waktu_ambil}`;
-    infoHeader.style.display = 'block';
 }
 
 function renderDetailHeader(meta) {
     const dh = document.getElementById('detailHeader');
     const info = meta.header_info;
-
-    if (!info) {
-        dh.innerHTML = `<div style="text-align:center; font-size:11px;">Info Detail tidak tersedia</div>`;
-        dh.style.display = 'block';
-        return;
-    }
-
+    if (!info) { dh.style.display = 'none'; return; }
+    
+    dh.style.display = 'block';
     dh.innerHTML = `
         <div class="dh-top">
             <div>
@@ -206,98 +155,96 @@ function renderDetailHeader(meta) {
             <div class="dh-item"><strong>Arah</strong>${formatters.clean(info.arah)}</div>
             <div class="dh-item"><strong>Jarak</strong>${formatters.clean(info.jarak_pandang)}</div>
         </div>
-        <div style="margin-top:8px; font-size:10px; text-align:right; color:#64748b;">
-            Update: ${meta.waktu_ambil}
-        </div>
     `;
-    dh.style.display = 'block';
 }
 
-// Fungsi Render Chart (Canvas)
 function renderChart(dataHasil) {
     const canvas = document.getElementById('weatherChart');
     const ctx = canvas.getContext('2d');
-    const container = document.getElementById('chartContainer');
+    let dataPoints = []; let labels = [];
     
-    let dataPoints = [];
-
     if (dataHasil.length > 0 && dataHasil[0].prakiraan) {
         dataHasil[0].prakiraan.forEach(day => {
-            const val = parseInt(day.suhu.replace(/\D/g, '')); 
+            let val = 0;
+            if (activeChartType === 'suhu') val = formatters.getNumber(day.suhu);
+            else if (activeChartType === 'kelembapan') val = formatters.getNumber(day.kelembapan);
+            else if (activeChartType === 'angin') val = formatters.getNumber(day.angin);
+            
             if (!isNaN(val)) {
                 dataPoints.push(val);
+                labels.push(day.tanggal.split(' ')[0]);
             }
         });
     }
 
-    if (dataPoints.length === 0) {
-        container.style.display = 'none';
-        return;
-    }
+    if (dataPoints.length === 0) return;
 
-    container.style.display = 'block';
+    const config = {
+        suhu: { color: '#d63384', bg: 'rgba(214, 51, 132, 0.1)' },
+        kelembapan: { color: '#0d6efd', bg: 'rgba(13, 110, 253, 0.1)' },
+        angin: { color: '#198754', bg: 'rgba(25, 135, 84, 0.1)' }
+    };
+    const style = config[activeChartType];
 
-    // Setup Canvas High-DPI
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
     
-    const width = rect.width;
-    const height = rect.height;
-    const padding = 15;
+    const width = rect.width; const height = rect.height;
+    const padLeft = 30; const padBottom = 20;
+    const graphW = width - padLeft - 10; const graphH = height - padBottom - 10;
 
-    const minVal = Math.min(...dataPoints) - 1;
-    const maxVal = Math.max(...dataPoints) + 1;
-    const range = maxVal - minVal;
+    let minVal = Math.min(...dataPoints);
+    let maxVal = Math.max(...dataPoints);
+    if (minVal === maxVal) { minVal -= 5; maxVal += 5; }
+    else { const r = maxVal - minVal; minVal -= r * 0.2; maxVal += r * 0.2; }
 
-    const getY = (val) => height - padding - ((val - minVal) / range) * (height - (padding * 2));
-    const getX = (idx) => padding + (idx / (dataPoints.length - 1)) * (width - (padding * 2));
+    const getX = (i) => padLeft + (i / (dataPoints.length - 1)) * graphW;
+    const getY = (v) => 10 + graphH - ((v - minVal) / (maxVal - minVal)) * graphH;
 
     ctx.clearRect(0, 0, width, height);
+    ctx.strokeStyle = '#eee'; ctx.lineWidth = 1; ctx.fillStyle = '#888';
+    ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
 
-    // Garis
-    ctx.beginPath();
-    ctx.strokeStyle = '#007bff';
-    ctx.lineWidth = 2;
-    dataPoints.forEach((val, i) => {
-        const x = getX(i);
+    for (let i = 0; i <= 4; i++) {
+        const val = minVal + (i / 4) * (maxVal - minVal);
         const y = getY(val);
+        ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(width, y); ctx.stroke();
+        ctx.fillText(Math.round(val), padLeft - 5, y);
+    }
+
+    ctx.beginPath(); ctx.strokeStyle = style.color; ctx.lineWidth = 2;
+    dataPoints.forEach((val, i) => {
+        const x = getX(i); const y = getY(val);
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     });
     ctx.stroke();
 
-    // Area
-    ctx.lineTo(getX(dataPoints.length - 1), height);
-    ctx.lineTo(getX(0), height);
+    ctx.lineTo(getX(dataPoints.length - 1), height - padBottom);
+    ctx.lineTo(getX(0), height - padBottom);
     ctx.closePath();
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "rgba(0, 123, 255, 0.2)");
-    gradient.addColorStop(1, "rgba(0, 123, 255, 0)");
-    ctx.fillStyle = gradient;
-    ctx.fill();
+    gradient.addColorStop(0, style.bg); gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient; ctx.fill();
 
-    // Titik & Label
-    dataPoints.forEach((val, i) => {
-        const x = getX(i);
-        const y = getY(val);
-
-        ctx.beginPath();
-        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#007bff'; ctx.lineWidth = 2;
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
-
-        // Label (Hanya tampilkan jika tidak terlalu rapat)
-        if (dataPoints.length < 15 || i % 2 === 0) {
-            ctx.fillStyle = '#333'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
-            const textY = (i > 0 && val < dataPoints[i-1]) ? y + 14 : y - 7;
-            ctx.fillText(val, x, textY);
+    ctx.fillStyle = '#666'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const step = Math.ceil(labels.length / 6);
+    labels.forEach((lbl, i) => {
+        if (i % step === 0 || i === labels.length - 1) {
+            ctx.fillText(lbl, getX(i), height - padBottom + 5);
         }
+    });
+
+    dataPoints.forEach((val, i) => {
+        const x = getX(i); const y = getY(val);
+        ctx.beginPath(); ctx.fillStyle = '#fff'; ctx.strokeStyle = style.color; ctx.lineWidth = 2;
+        ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     });
 }
 
-// Fungsi Render List (Collapsible & Filtered)
+// --- RENDER LIST (DEFAULT CLOSED) ---
 function renderResults(data, filter = '') {
     const container = document.getElementById('resultsContainer');
     container.innerHTML = '';
@@ -313,83 +260,57 @@ function renderResults(data, filter = '') {
     });
 
     Object.keys(groups).forEach(key => {
-        // Filter Items
-        const filteredItems = groups[key].filter(item => {
-            const searchStr = (item.lokasi + ' ' + item.kondisi + ' ' + item.suhu).toLowerCase();
-            return searchStr.includes(filter);
-        });
+        const filtered = groups[key].filter(item => 
+            (item.lokasi + item.kondisi + item.suhu).toLowerCase().includes(filter)
+        );
+        if (filtered.length === 0) return;
 
-        if (filteredItems.length === 0) return;
-
-        const groupDiv = document.createElement('div');
-        groupDiv.className = 'date-group';
+        const grp = document.createElement('div');
+        // SET DEFAULT CLASS MENJADI 'closed' AGAR TERTUTUP
+        grp.className = 'date-group closed';
         
-        // Header
-        const headerHTML = `
-            <div class="date-header">
-                <span>${key}</span>
-                <svg class="chevron" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
-            </div>
-        `;
+        const hdr = document.createElement('div');
+        hdr.className = 'date-header';
+        hdr.innerHTML = `<span>${key}</span><svg class="chevron" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>`;
+        hdr.onclick = () => grp.classList.toggle('closed');
         
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'group-content';
+        const content = document.createElement('div');
+        content.className = 'group-content';
 
-        filteredItems.forEach(item => {
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'location-item';
+        filtered.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'location-item';
             
-            let extraInfo = '';
+            let detailInfo = '';
             if (isDetail) {
-                // Layout Grid untuk detail
-                extraInfo = `
-                    <div style="margin-top:6px; font-size:10px; color:#666; display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
-                        <span style="background:#f1f5f9; padding:2px 4px; border-radius:3px;">
-                           Angin: ${formatters.clean(item.angin)}
-                        </span>
-                        <span style="background:#f1f5f9; padding:2px 4px; border-radius:3px;">
-                           Arah: ${formatters.clean(item.arah)}
-                        </span>
-                    </div>
-                `;
+                detailInfo = `<div style="margin-top:6px; font-size:10px; color:#666; display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
+                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">Angin: ${formatters.clean(item.angin)}</span>
+                    <span style="background:#f1f5f9; padding:2px 6px; border-radius:3px;">Arah: ${formatters.clean(item.arah)}</span>
+                </div>`;
             }
 
-            itemDiv.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="loc-name" style="margin-bottom:0; font-size:12px;">
-                        ${isDetail ? 'Per Jam' : formatters.clean(item.lokasi)}
-                    </span>
-                    <span style="font-weight:bold; color:#d63384; font-size:13px;">
-                        ${formatters.suhu(item.suhu)}
-                    </span>
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between;">
+                    <span class="loc-name" style="margin:0; font-size:12px;">${isDetail ? 'Per Jam' : formatters.clean(item.lokasi)}</span>
+                    <span style="font-weight:bold; color:#d63384; font-size:13px;">${formatters.suhu(item.suhu)}</span>
                 </div>
                 <div class="loc-data" style="margin-top:4px;">
                     <span style="font-weight:500;">${formatters.clean(item.kondisi)}</span>
-                    <span style="color:#0d6efd; font-weight:500;">
-                        RH: ${formatters.clean(item.kelembapan)}
-                    </span>
+                    <span style="color:#0d6efd; font-weight:500;">RH: ${formatters.clean(item.kelembapan)}</span>
                 </div>
-                ${extraInfo}
+                ${detailInfo}
             `;
-            contentDiv.appendChild(itemDiv);
+            content.appendChild(div);
         });
 
-        groupDiv.innerHTML = headerHTML;
-        groupDiv.appendChild(contentDiv);
-
-        // Collapse Event
-        groupDiv.querySelector('.date-header').addEventListener('click', () => {
-            groupDiv.classList.toggle('closed');
-        });
-
-        container.appendChild(groupDiv);
+        grp.appendChild(hdr);
+        grp.appendChild(content);
+        container.appendChild(grp);
     });
 }
 
 function updateStatus(msg, isError) {
-    const statusEl = document.getElementById('status');
-    statusEl.innerText = msg;
-    statusEl.style.color = isError ? '#dc3545' : '#666';
+    const el = document.getElementById('status');
+    el.innerText = msg;
+    el.style.color = isError ? '#dc3545' : '#666';
 }

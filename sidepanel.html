@@ -6,21 +6,22 @@
       padding: 15px; 
       font-family: 'Segoe UI', sans-serif; 
       background-color: #f8f9fa;
-      margin: 0;
-      color: #333;
+      margin: 0; color: #333;
+      overflow-y: auto; /* Scroll di body */
     }
     
-    /* Sticky Header Area */
-    .sticky-top {
-      position: sticky; top: 0; background: #f8f9fa; 
-      padding-bottom: 10px; z-index: 100;
-      border-bottom: 1px solid #ddd;
+    /* --- Header Section (Tidak lagi Sticky) --- */
+    .header-section {
+      background: #f8f9fa; 
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ddd; 
       margin-bottom: 15px;
+      /* position: sticky dihapus */
     }
 
     h3 { margin-top: 0; text-align: center; margin-bottom: 15px; color: #212529; }
 
-    /* --- Tabs Navigation --- */
+    /* Tabs */
     .tabs { display: flex; background: #e9ecef; border-radius: 8px; padding: 4px; margin-bottom: 15px; }
     .tab-btn {
       flex: 1; padding: 8px; border: none; background: transparent;
@@ -29,20 +30,18 @@
     }
     .tab-btn.active { background: white; color: #007bff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
-    /* --- Action Buttons --- */
+    /* Buttons */
     .btn {
       width: 100%; padding: 10px; border: none; cursor: pointer; 
       font-weight: bold; border-radius: 6px; margin-bottom: 8px;
       font-size: 13px; color: white; transition: 0.2s;
     }
     .btn-primary { background: #007bff; } .btn-primary:hover { background: #0056b3; }
-    .btn-json { background: #28a745; display: none; } .btn-json:hover { background: #218838; }
-    .btn-csv { background: #17a2b8; display: none; } .btn-csv:hover { background: #138496; }
+    .btn-json { background: #28a745; display: none; }
+    .btn-csv { background: #17a2b8; display: none; }
 
-    /* --- Search Box --- */
-    .search-container {
-      position: relative; margin-bottom: 10px; display: none;
-    }
+    /* Search */
+    .search-container { position: relative; margin-bottom: 10px; display: none; }
     .search-input {
       width: 100%; padding: 8px 10px 8px 35px; 
       border: 1px solid #ced4da; border-radius: 6px;
@@ -54,19 +53,16 @@
       width: 14px; height: 14px; fill: #999;
     }
 
-    /* --- Info Header: Simple Mode --- */
+    /* Headers Info */
     #simpleHeader {
       background: #fff3cd; border-left: 4px solid #ffc107;
       padding: 10px; border-radius: 4px; margin-top: 10px;
       font-size: 12px; color: #856404; display: none;
     }
-
-    /* --- Info Header: Detail Mode (Blue Card) --- */
     #detailHeader {
       background: linear-gradient(151deg, #e0f2fe 0%, #dbeafe 100%);
-      border: 1px solid #bfdbfe;
-      padding: 15px; border-radius: 12px; margin-top: 10px; margin-bottom: 10px;
-      color: #1e3a8a; display: none;
+      border: 1px solid #bfdbfe; padding: 15px; border-radius: 12px;
+      margin-top: 10px; margin-bottom: 10px; color: #1e3a8a; display: none;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
     .dh-top { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
@@ -80,49 +76,43 @@
     .info-label { font-weight: bold; display: block; margin-bottom: 2px;}
     .info-time { font-size: 11px; opacity: 0.8; display: block;}
 
-    /* --- Chart Container --- */
+    /* Chart Container */
     #chartContainer {
-        background: white; padding: 10px; border-radius: 8px; 
-        border: 1px solid #dee2e6; margin-bottom: 12px; display: none;
+        background: white; padding: 15px 10px 10px 10px; 
+        border-radius: 8px; border: 1px solid #dee2e6; 
+        margin-bottom: 12px; display: none;
     }
+    .chart-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .chart-select { padding: 4px 8px; font-size: 11px; border-radius: 4px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; }
 
-    /* --- List Styles (Collapsible) --- */
-    #resultsContainer { display: flex; flex-direction: column; gap: 12px; }
+    /* List Styles */
+    #resultsContainer { display: flex; flex-direction: column; gap: 12px; padding-bottom: 20px; }
     
-    .date-group { 
-        background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; 
-        transition: all 0.2s;
-    }
+    .date-group { background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; transition: all 0.2s; }
     
     .date-header { 
         background: #343a40; color: white; padding: 10px 12px; 
-        font-size: 12px; font-weight: bold; 
-        cursor: pointer; user-select: none;
+        font-size: 12px; font-weight: bold; cursor: pointer; 
         display: flex; justify-content: space-between; align-items: center;
     }
     .date-header:hover { background: #23272b; }
     
-    .chevron {
-        width: 16px; height: 16px; fill: none; stroke: white; stroke-width: 2;
-        transition: transform 0.3s ease;
-    }
-    
-    /* State tertutup */
+    /* Logic Collapsible */
+    .group-content { display: block; }
+    .date-group.closed .group-content { display: none; } /* Hidden when closed */
+    .chevron { width: 16px; height: 16px; fill: none; stroke: white; stroke-width: 2; transition: transform 0.2s; }
     .date-group.closed .chevron { transform: rotate(-90deg); }
-    .date-group.closed .group-content { display: none; }
 
     .location-item { padding: 10px 12px; border-bottom: 1px solid #f1f1f1; font-size: 12px; }
     .location-item:last-child { border-bottom: none; }
-    
     .loc-name { font-weight: bold; color: #007bff; display: block; margin-bottom: 6px; font-size: 13px;}
     .loc-data { display: flex; justify-content: space-between; color: #495057; }
     
-    /* Status Text */
     #status { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <div class="sticky-top">
+  <div class="header-section">
     <h3>BMKG Reader</h3>
     
     <div class="tabs">
@@ -150,8 +140,15 @@
     <div id="detailHeader"></div>
 
     <div id="chartContainer">
-        <p style="font-size: 11px; font-weight: bold; color: #666; margin: 0 0 5px 0;">Tren Suhu (°C)</p>
-        <canvas id="weatherChart" width="300" height="100" style="width: 100%; height: 100px;"></canvas>
+        <div class="chart-controls">
+            <span style="font-size: 11px; font-weight: bold; color: #666;">Grafik Tren</span>
+            <select id="chartType" class="chart-select">
+                <option value="suhu">Suhu (°C)</option>
+                <option value="kelembapan">Kelembapan (%)</option>
+                <option value="angin">Kecepatan Angin (km/j)</option>
+            </select>
+        </div>
+        <canvas id="weatherChart" width="320" height="150" style="width: 100%; height: 150px;"></canvas>
     </div>
     
     <div id="status">Pilih mode lalu klik tombol.</div>
