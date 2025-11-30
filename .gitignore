@@ -1,0 +1,13 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Zip files (Jangan upload zip hasil build ke source code, taruh di Releases)
+*.zip
